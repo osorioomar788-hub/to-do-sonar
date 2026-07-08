@@ -20,7 +20,7 @@ export default function TaskListScreen({ navigation }) {
       setLoading(true);
       const data = await getTasks();
       setTasks(data.data || []);
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "No se pudo conectar a la API");
     } finally {
       setLoading(false);

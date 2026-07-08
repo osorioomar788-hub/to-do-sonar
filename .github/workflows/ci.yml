@@ -1,0 +1,80 @@
+name: CI Pruebas y Calidad
+
+on:
+  push:
+    branches:
+      - main
+      - tarea07-automatizacion
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    name: Pruebas automatizadas
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependencias JavaScript
+        run: npm ci
+
+      - name: Ejecutar ESLint
+        run: npm run lint
+
+      - name: Ejecutar Jest con cobertura
+        run: npm run test:coverage
+
+      - name: Exportar aplicación Expo Web
+        run: npx expo export --platform web --output-dir dist
+
+      - name: Configurar Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias Python
+        run: pip install -r requirements-test.txt
+
+      - name: Iniciar servicios y ejecutar Selenium
+        env:
+          HEADLESS: "1"
+          APP_BASE_URL: http://127.0.0.1:8081
+          API_BASE_URL: http://127.0.0.1:3000
+        run: |
+          mkdir -p reports
+
+          npx --yes json-server db.json --port 3000 > json-server.log 2>&1 &
+          npx --yes serve -s dist -l 8081 > expo-web.log 2>&1 &
+
+          npx --yes wait-on             http://127.0.0.1:3000/todos             http://127.0.0.1:8081
+
+          python -m pytest selenium_tests/tests -v             --html=reports/reporte_pytest.html             --self-contained-html             --cov=selenium_tests.pages             --cov-report=term-missing             --cov-report=xml:reports/coverage.xml
+
+      - name: Publicar reportes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes-calidad
+          path: |
+            reports/
+            coverage/
+            json-server.log
+            expo-web.log
+          if-no-files-found: warn
